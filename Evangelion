@@ -1,0 +1,315 @@
+ContentView.swift
+//  Evangelion
+//
+import SwiftUI
+import AVFoundation
+
+enum Personagem: String {
+    case shinji = "SHINJI // 01"
+    case asuka = "ASUKA // 02"
+    case rei = "REI // 00"
+    case sistema = "SYS // INFO"
+
+    var tagColor: Color {
+        switch self {
+        case .shinji: return Color(red: 0.3, green: 0.6, blue: 1.0)
+        case .asuka: return Color(red: 1.0, green: 0.3, blue: 0.3)
+        case .rei: return Color(red: 0.4, green: 0.9, blue: 0.8)
+        case .sistema: return Color.gray
+        }
+    }
+}
+
+struct Fala: Identifiable {
+    let id = UUID()
+    let autor: Personagem
+    let texto: String
+    let duracaoTotal: Double
+}
+
+struct ContentView: View {
+    // ⏳ Ajuste aqui os segundos de silêncio/música antes do texto começar:
+    let tempoEsperaInicial: Double = 4.0
+
+    let falas: [Fala] = [
+        Fala(autor: .asuka, texto: "Resumindo você é sozinho Shinji", duracaoTotal: 2.2),
+        Fala(autor: .shinji, texto: "Eu sou né?", duracaoTotal: 2.0),
+        Fala(autor: .asuka, texto: "Isso é ser dependente sabia?", duracaoTotal: 2.4),
+        Fala(autor: .asuka, texto: "Não passa de uma relação simbiótica", duracaoTotal: 2.6),
+        Fala(autor: .shinji, texto: "Acho que deve ser isso..", duracaoTotal: 2.0),
+        Fala(autor: .asuka, texto: "Pra falar bem a verdade,\nvocê só quer que as\npessoas precisem de você", duracaoTotal: 3.8),
+        Fala(autor: .shinji, texto: "É deve ser isso", duracaoTotal: 2.0),
+        Fala(autor: .asuka, texto: "Você só fica parado esperando\nque as pessoas te façam feliz", duracaoTotal: 3.2),
+        Fala(autor: .asuka, texto: "É uma felicidade de mentira", duracaoTotal: 2.2),
+        Fala(autor: .shinji, texto: "Isso também vale pra você", duracaoTotal: 2.4),
+        Fala(autor: .rei, texto: "Quem odeia a si mesmo\nnunca será capaz\nDe amar e confiar nos outros", duracaoTotal: 4.2),
+        Fala(autor: .rei, texto: "Você deveria saber que eu acho que\nNós somos apenas um e iguais", duracaoTotal: 3.8),
+        Fala(autor: .shinji, texto: "Não acho que possamos evitar", duracaoTotal: 2.4),
+        Fala(autor: .shinji, texto: "Não, não acho que possamos evitar", duracaoTotal: 2.8),
+        Fala(autor: .asuka, texto: "Não falamos muito", duracaoTotal: 2.2),
+        Fala(autor: .asuka, texto: "Acho que é porque nada mudou", duracaoTotal: 2.6),
+        Fala(autor: .shinji, texto: "E não tenho certeza se gosto disso", duracaoTotal: 2.8),
+        Fala(autor: .asuka, texto: "E eu estou tão cansada de brigar", duracaoTotal: 3.0),
+        Fala(autor: .sistema, texto: "...", duracaoTotal: 2.0)
+    ]
+
+    @State private var indiceAtual: Int = -1
+    @State private var textoAnimadoAtual: String = ""
+    @State private var finalizado: Bool = false
+    @State private var opacidadeCursor: Double = 1.0
+    @State private var tarefaAnimacao: Task<Void, Never>?
+    @State private var tocadorAudio: AVAudioPlayer?
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            ScanlinesOverlay()
+                .opacity(0.05)
+                .ignoresSafeArea()
+
+            RadialGradient(
+                gradient: Gradient(colors: [Color.clear, Color.black.opacity(0.85)]),
+                center: .center,
+                startRadius: 200,
+                endRadius: 550
+            )
+            .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    Circle().fill(Color.red).frame(width: 9, height: 9)
+                    Circle().fill(Color.yellow).frame(width: 9, height: 9)
+                    Circle().fill(Color.green).frame(width: 9, height: 9)
+
+                    Spacer()
+
+                    Text("NERV_OS // PROTOCOL_EVANGELION_SYNC")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.gray.opacity(0.8))
+                        .tracking(1.2)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color(white: 0.10))
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("TRACK: The Perfect Pair — beabadoobee")
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.red.opacity(0.8))
+                            Text("SUBJECTS: ASUKA / SHINJI / REI")
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
+                        Text(finalizado ? "[STREAM_CLOSED]" : "[SYNC_ACTIVE]")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundColor(finalizado ? .red : .green)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+
+                    Divider()
+                        .background(Color.red.opacity(0.3))
+                        .padding(.horizontal, 16)
+
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 14) {
+                                ForEach(0..<falas.count, id: \.self) { i in
+                                    if i < indiceAtual {
+                                        HStack(alignment: .top, spacing: 10) {
+                                            Text(String(format: "%02d", i + 1))
+                                                .font(.system(size: 11, design: .monospaced))
+                                                .foregroundColor(.gray.opacity(0.4))
+
+                                            Text("[\(falas[i].autor.rawValue)]")
+                                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                                .foregroundColor(falas[i].autor.tagColor.opacity(0.6))
+
+                                            Text(falas[i].texto)
+                                                .font(.system(size: 14, weight: .regular, design: .monospaced))
+                                                .foregroundColor(.white.opacity(0.7))
+                                                .lineSpacing(4)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .id(i)
+                                    } else if i == indiceAtual {
+                                        HStack(alignment: .top, spacing: 10) {
+                                            Text(String(format: "%02d", i + 1))
+                                                .font(.system(size: 11, design: .monospaced))
+                                                .foregroundColor(.red.opacity(0.8))
+
+                                            Text("[\(falas[i].autor.rawValue)]")
+                                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                                .foregroundColor(falas[i].autor.tagColor)
+
+                                            HStack(spacing: 2) {
+                                                Text(textoAnimadoAtual)
+                                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(Color(red: 1.0, green: 0.25, blue: 0.25))
+                                                    .shadow(color: Color.red.opacity(0.9), radius: 6)
+                                                    .lineSpacing(4)
+
+                                                Text("▌")
+                                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(.red)
+                                                    .opacity(opacidadeCursor)
+                                                    .shadow(color: Color.red.opacity(0.8), radius: 6)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .id(i)
+                                    }
+                                }
+
+                                if finalizado {
+                                    Button(action: reiniciarCena) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "arrow.counterclockwise")
+                                            Text("RESTART SYNC SEQUENCE")
+                                        }
+                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.green)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
+                                        .background(Color.green.opacity(0.08))
+                                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.green.opacity(0.3), lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.top, 12)
+                                    .id(999)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 24)
+                        }
+                        .onChange(of: indiceAtual) { _, novoIndice in
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                proxy.scrollTo(novoIndice, anchor: .bottom)
+                            }
+                        }
+                        .onChange(of: finalizado) { _, acabou in
+                            if acabou {
+                                withAnimation {
+                                    proxy.scrollTo(999, anchor: .bottom)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .background(Color(white: 0.04).opacity(0.92))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .padding(18)
+        }
+        .task {
+            withAnimation(.easeInOut(duration: 0.45).repeatForever(autoreverses: true)) {
+                opacidadeCursor = 0.15
+            }
+            iniciarAudio()
+            iniciarNovaAnimacao()
+        }
+        .onDisappear {
+            tarefaAnimacao?.cancel()
+            tocadorAudio?.stop()
+        }
+    }
+
+    private func iniciarNovaAnimacao() {
+        tarefaAnimacao?.cancel()
+        tarefaAnimacao = Task {
+            await rodarAnimacao()
+        }
+    }
+
+    private func reiniciarCena() {
+        tarefaAnimacao?.cancel()
+        indiceAtual = -1
+        textoAnimadoAtual = ""
+        tocadorAudio?.currentTime = 0
+        tocadorAudio?.play()
+        iniciarNovaAnimacao()
+    }
+
+    private func rodarAnimacao() async {
+        finalizado = false
+
+        // ⏳ Pausa inicial antes de começar o texto
+        let nanosEspera = UInt64(tempoEsperaInicial * 1_000_000_000)
+        try? await Task.sleep(nanoseconds: nanosEspera)
+        if Task.isCancelled { return }
+
+        for i in 0..<falas.count {
+            if Task.isCancelled { return }
+
+            indiceAtual = i
+            textoAnimadoAtual = ""
+
+            let fala = falas[i]
+            let totalCaracteres = max(1, fala.texto.count)
+            let atrasoPorCaractere = (fala.duracaoTotal * 0.6) / Double(totalCaracteres)
+
+            for char in fala.texto {
+                if Task.isCancelled { return }
+                textoAnimadoAtual.append(char)
+                let nanos = UInt64(atrasoPorCaractere * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanos)
+            }
+
+            let sobra = UInt64((fala.duracaoTotal * 0.4) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: sobra)
+        }
+        if !Task.isCancelled {
+            finalizado = true
+        }
+    }
+
+    private func iniciarAudio() {
+        guard let url = Bundle.main.url(forResource: "audio", withExtension: "mp3") else {
+            print("Aviso: 'audio.mp3' não encontrado no Bundle.")
+            return
+        }
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                #if os(iOS)
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+                try AVAudioSession.sharedInstance().setActive(true)
+                #endif
+
+                let player = try AVAudioPlayer(contentsOf: url)
+                player.numberOfLoops = 0
+                player.prepareToPlay()
+
+                await MainActor.run {
+                    self.tocadorAudio = player
+                    self.tocadorAudio?.play()
+                }
+            } catch {
+                print("Erro ao carregar o áudio: \(error.localizedDescription)")
+            }
+        }
+    }
+}
+
+struct ScanlinesOverlay: View {
+    var body: some View {
+        Canvas { context, size in
+            for y in stride(from: 0, to: size.height, by: 4) {
+                var path = Path()
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addLine(to: CGPoint(x: size.width, y: y))
+                context.stroke(path, with: .color(.white), lineWidth: 0.8)
+            }
+        }
+    }
+}
